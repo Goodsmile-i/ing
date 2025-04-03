@@ -43,4 +43,3 @@ private:
 
 
 #endif	/* TEXTURE_H */
-#pragma once
