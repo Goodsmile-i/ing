@@ -8,7 +8,6 @@
 #include "lighting_technique.h"
 #include "glut_backend.h"
 #include "util.h"
-
 #define WINDOW_WIDTH  1280
 #define WINDOW_HEIGHT 1024
 
@@ -28,6 +27,7 @@ struct Vertex
     }
 };
 
+
 class Main : public ICallbacks
 {
 public:
@@ -38,10 +38,11 @@ public:
         m_pTexture = NULL;
         m_pEffect = NULL;
         m_scale = 0.0f;
-        m_directionalLight.Color = Vector3f(1.0f, 1.0f, 1.0f);
-        m_directionalLight.AmbientIntensity = 0.0f;
-        m_directionalLight.DiffuseIntensity = 0.0f;
-        m_directionalLight.Direction = Vector3f(1.0f, 0.0f, 0.0f);
+        m_scaleset = 0.0f;
+        m_directionalLight.Color = Vector3f(1.0f, 1.0f, 1.0f);//Цвет света
+        m_directionalLight.AmbientIntensity = 0.5f;//Интенсивность начального внешний(общий) свет
+        m_directionalLight.DiffuseIntensity = 0.75f;//Интенсивность начальная рассеянного света
+        m_directionalLight.Direction = Vector3f(0.0f, 0.0f, 1.0f);//Направление света 
     }
 
     ~Main()
@@ -53,13 +54,15 @@ public:
 
     bool Init()
     {
-        Vector3f Pos(-10.0f, 0.0f, -10.0f);
-        Vector3f Target(1.0f, 0.0f, 1.0f);
-        Vector3f Up(0.0, 1.0f, 0.0f);
+        Vector3f Pos(0.0f, 0.0f, -3.0f);//Позиция камеры
+        Vector3f Target(0.0f, 0.0f, 1.0f);//Направление камеры
+        Vector3f Up(0.0, 1.0f, 0.0f);//Высота позиции камеры
         m_pGameCamera = new Camera(WINDOW_WIDTH, WINDOW_HEIGHT, Pos, Target, Up);
 
-        unsigned int Indices[] = { 0, 2, 1,
-                                   0, 3, 2 };
+        unsigned int Indices[] = { 0, 3, 1,
+                                   1, 3, 2,
+                                   2, 3, 0,
+                                   1, 2, 0 };
 
         CreateIndexBuffer(Indices, sizeof(Indices));
 
@@ -97,38 +100,20 @@ public:
 
         glClear(GL_COLOR_BUFFER_BIT);
 
-        m_scale += 0.01f;
-
-        SpotLight sl[2];
-        sl[0].DiffuseIntensity = 15.0f;
-        sl[0].Color = Vector3f(1.0f, 1.0f, 0.7f);
-        sl[0].Position = Vector3f(-0.0f, -1.9f, -0.0f);
-        sl[0].Direction = Vector3f(sinf(m_scale), 0.0f, cosf(m_scale));
-        sl[0].Attenuation.Linear = 0.1f;
-        sl[0].Cutoff = 20.0f;
-
-        sl[1].DiffuseIntensity = 5.0f;
-        sl[1].Color = Vector3f(0.0f, 1.0f, 1.0f);
-        sl[1].Position = m_pGameCamera->GetPos();
-        sl[1].Direction = m_pGameCamera->GetTarget();
-        sl[1].Attenuation.Linear = 0.1f;
-        sl[1].Cutoff = 10.0f;
-
-        m_pEffect->SetSpotLights(2, sl);
-
+        m_scale += 0.1f;//Скорость вращения 
 
         Pipeline p;
-        p.Rotate(0.0f, 0.0f, 0.0f);
-        p.WorldPos(0.0f, 0.0f, 1.0f);
+        p.Rotate(0.0f, m_scale, 0.0f);//Вращение по векторам координат
+        p.WorldPos(0.0f, 0.0f, 3.0f);//Позиция треугольника 
         p.SetCamera(m_pGameCamera->GetPos(), m_pGameCamera->GetTarget(), m_pGameCamera->GetUp());
-        p.SetPerspectiveProj(60.0f, WINDOW_WIDTH, WINDOW_HEIGHT, 0.1f, 100.0f);
+        p.SetPerspectiveProj(60.0f, WINDOW_WIDTH, WINDOW_HEIGHT, 1.0f, 100.0f);//Параметры перспективы
         m_pEffect->SetWVP(p.GetWVPTrans());
         const Matrix4f& WorldTransformation = p.GetWorldTrans();
         m_pEffect->SetWorldMatrix(WorldTransformation);
         m_pEffect->SetDirectionalLight(m_directionalLight);
         m_pEffect->SetEyeWorldPos(m_pGameCamera->GetPos());
-        m_pEffect->SetMatSpecularIntensity(1.0f);
-        m_pEffect->SetMatSpecularPower(32);
+        m_pEffect->SetMatSpecularIntensity(m_scaleset);//Коэф. отражения
+        m_pEffect->SetMatSpecularPower(32);//Мощность отражения
 
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
@@ -139,7 +124,7 @@ public:
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const GLvoid*)20);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_IBO);
         m_pTexture->Bind(GL_TEXTURE0);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
 
         glDisableVertexAttribArray(0);
         glDisableVertexAttribArray(1);
@@ -161,26 +146,34 @@ public:
 
     virtual void KeyboardCB(unsigned char Key, int x, int y)
     {
-        switch (Key) {
-        case 'q':
+        m_pGameCamera->OnKeyboard(Key);
+        if (int(Key) == 27 || Key == 'q')
+        {
             glutLeaveMainLoop();
-            break;
-
-        case 'a':
-            m_directionalLight.AmbientIntensity += 0.05f;
-            break;
-
-        case 's':
-            m_directionalLight.AmbientIntensity -= 0.05f;
-            break;
-
-        case 'z':
+        }
+        else if (Key == 'u')
+        {
+            m_directionalLight.AmbientIntensity += 0.09f;
+        }
+        else if (Key == 'j')
+        {
+            m_directionalLight.AmbientIntensity -= 0.09f;
+        }
+        else if (Key == 'i')
+        {
             m_directionalLight.DiffuseIntensity += 0.05f;
-            break;
-
-        case 'x':
+        }
+        else if (Key == 'k')
+        {
             m_directionalLight.DiffuseIntensity -= 0.05f;
-            break;
+        }
+        else if (Key == 'y')
+        {
+            m_scaleset = 1.0f;
+        }
+        else if (Key == 'h')
+        {
+            m_scaleset = 0.0f;
         }
     }
 
@@ -216,10 +209,10 @@ private:
 
     void CreateVertexBuffer(const unsigned int* pIndices, unsigned int IndexCount)
     {
-        Vertex Vertices[4] = { Vertex(Vector3f(-10.0f, -2.0f, -10.0f), Vector2f(0.0f, 0.0f)),
-                               Vertex(Vector3f(10.0f, -2.0f, -10.0f), Vector2f(1.0f, 0.0f)),
-                               Vertex(Vector3f(10.0f, -2.0f, 10.0f), Vector2f(1.0f, 1.0f)),
-                               Vertex(Vector3f(-10.0f, -2.0f, 10.0f), Vector2f(0.0f, 1.0f)) };
+        Vertex Vertices[4] = { Vertex(Vector3f(-1.0f, -1.0f, 0.5773f), Vector2f(0.0f, 0.0f)),
+                               Vertex(Vector3f(0.0f, -1.0f, -1.15475), Vector2f(0.5f, 0.0f)),
+                               Vertex(Vector3f(1.0f, -1.0f, 0.5773f),  Vector2f(1.0f, 0.0f)),
+                               Vertex(Vector3f(0.0f, 1.0f, 0.0f),      Vector2f(0.5f, 1.0f)) };
 
         unsigned int VertexCount = ARRAY_SIZE_IN_ELEMENTS(Vertices);
 
@@ -244,6 +237,7 @@ private:
     Texture* m_pTexture;
     Camera* m_pGameCamera;
     float m_scale;
+    float m_scaleset;
     DirectionalLight m_directionalLight;
 };
 
@@ -252,12 +246,13 @@ int main(int argc, char** argv)
 {
     GLUTBackendInit(argc, argv);
 
-    if (!GLUTBackendCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, 32, false, "OpenGL tutors")) {
+    if (!GLUTBackendCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, 32, false, "Less18")) {
         return 1;
     }
 
+    Magick::InitializeMagick(nullptr);
     Main* pApp = new Main();
-
+    printf("Instraction:\n 'Y'and'H' -set SpecularInten. \n 'U'AND'j' - set AmbientLight \n 'I'and'K' -set DirectLight");
     if (!pApp->Init()) {
         return 1;
     }
